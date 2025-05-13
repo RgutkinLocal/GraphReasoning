@@ -1,7 +1,4 @@
 streamlit
 networkx
 pyvis
-pandas
-matplotlib
-torch
-rdflib
+huggingface_hub
