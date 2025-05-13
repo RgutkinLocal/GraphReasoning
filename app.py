@@ -24,6 +24,14 @@ def load_graph():
 st.info("Loading the full graph from Hugging Face (~3 sec)...")
 G = load_graph()
 st.success(f"Graph loaded with {len(G.nodes())} nodes and {len(G.edges())} edges.")
+st.subheader("🧾 Inspect Sample Nodes")
+
+if st.checkbox("Show 5 example nodes"):
+    for i, (node_id, attr) in enumerate(G.nodes(data=True)):
+        st.write(f"🔹 ID: `{node_id}`")
+        st.write(attr)
+        if i >= 4:
+            break
 
 # --- Search nodes by label
 st.subheader("🔍 Search for a Node")
