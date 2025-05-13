@@ -3,11 +3,10 @@ import networkx as nx
 from huggingface_hub import hf_hub_download
 from pyvis.network import Network
 import streamlit.components.v1 as components
-import tempfile
 
 st.set_page_config(page_title="GraphReasoning Explorer", layout="wide")
 st.title("🧠 GraphReasoning Explorer")
-st.markdown("Explore the [LAMM@MIT GraphReasoning](https://github.com/lamm-mit/GraphReasoning) knowledge graph from 1000 scientific papers.")
+st.markdown("Explore the knowledge graph extracted from 1000 scientific papers by [LAMM@MIT](https://github.com/lamm-mit/GraphReasoning).")
 
 # --- Load the .graphml graph
 @st.cache_resource
@@ -21,34 +20,34 @@ def load_graph():
     G = nx.read_graphml(file_path)
     return G
 
-st.info("Loading the full graph from Hugging Face (~3 sec)...")
+st.info("Loading the knowledge graph (~3 sec)...")
 G = load_graph()
 st.success(f"Graph loaded with {len(G.nodes())} nodes and {len(G.edges())} edges.")
-st.subheader("🧾 Inspect Sample Nodes")
 
-if st.checkbox("Show 5 example nodes"):
-    for i, (node_id, attr) in enumerate(G.nodes(data=True)):
-        st.write(f"🔹 ID: `{node_id}`")
-        st.write(attr)
+# --- Show sample nodes to help user
+st.subheader("🧾 Sample Nodes")
+if st.checkbox("Show 5 example node IDs"):
+    for i, node in enumerate(G.nodes()):
+        st.write(f"🔹 `{node}`")
         if i >= 4:
             break
 
-# --- Search nodes by label
-st.subheader("🔍 Search for a Node")
-keyword = st.text_input("Enter keyword to search node labels:")
+# --- Node search by keyword
+st.subheader("🔍 Search for Node IDs by Keyword")
+keyword = st.text_input("Enter keyword (e.g., 'collagen', 'protein'):")
 
 if keyword:
-    matches = [n for n, d in G.nodes(data=True)
-               if keyword.lower() in str(d.get('label', '')).lower()]
+    matches = [n for n in G.nodes() if keyword.lower() in n.lower()]
     if matches:
-        st.write(f"✅ Found {len(matches)} matching nodes:")
+        st.write(f"✅ Found {len(matches)} matches:")
         for m in matches[:10]:
-            st.write(f"- **{G.nodes[m].get('label', m)}** (ID: `{m}`)")
+            st.write(f"- **{m}**")
+        st.code("Copy and paste these IDs into the path finder below.")
     else:
         st.warning("No matches found.")
 
-# --- Shortest path search
-st.subheader("🔗 Find Shortest Path Between Nodes")
+# --- Path finder
+st.subheader("🔗 Find Shortest Path Between Node IDs")
 
 col1, col2 = st.columns(2)
 with col1:
@@ -61,26 +60,26 @@ if st.button("Find Path"):
         try:
             path = nx.shortest_path(G, source=start_node, target=end_node)
             st.success(" → ".join(path))
-            st.write("Path labels:")
-            for n in path:
-                st.write(f"- {G.nodes[n].get('label', n)}")
+            st.write("Path details:")
+            for node in path:
+                st.write(f"- {node}")
         except nx.NetworkXNoPath:
-            st.error("No path found.")
+            st.error("No path found between those nodes.")
     else:
-        st.error("One or both nodes not found. Use the search above to get node IDs.")
+        st.error("One or both node IDs not found. Use the search above to look them up.")
 
-# --- Graph visualization
-st.subheader("🌐 Graph Visualization")
+# --- Visualization
+st.subheader("🌐 Visualize a Subgraph")
 
 if keyword and matches:
-    subG = G.subgraph(matches[:30])  # limit to small view
+    subG = G.subgraph(matches[:30])  # Keep small for visualization
     net = Network(height="600px", width="100%", notebook=False)
     net.from_nx(subG)
-    net.show_buttons(filter_=['physics'])
     net.repulsion(node_distance=120)
+    net.show_buttons(filter_=['physics'])
     net.save_graph("graph.html")
     with open("graph.html", "r", encoding="utf-8") as f:
         html = f.read()
         components.html(html, height=600)
 else:
-    st.markdown("*Search for a keyword above to view a local subgraph.*")
+    st.markdown("*Search above to see a related subgraph.*")
