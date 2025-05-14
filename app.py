@@ -1,54 +1,92 @@
+# app.py
 import streamlit as st
 import networkx as nx
+import pandas as pd
+import numpy as np
 from huggingface_hub import hf_hub_download
 from pyvis.network import Network
 import streamlit.components.v1 as components
+import pickle
+from sklearn.metrics.pairwise import cosine_similarity
+import umap
+import plotly.express as px
 
 st.set_page_config(page_title="GraphReasoning Explorer", layout="wide")
 st.title("🧠 GraphReasoning Explorer")
-st.markdown("Explore the knowledge graph extracted from 1000 scientific papers by [LAMM@MIT](https://github.com/lamm-mit/GraphReasoning).")
+st.markdown("Explore the scientific knowledge graph extracted by [LAMM@MIT](https://github.com/lamm-mit/GraphReasoning).")
 
-# --- Load the .graphml graph
+# --- Load GraphML
 @st.cache_resource
 def load_graph():
-    graph_name = 'large_graph_simple_giant.graphml'
     file_path = hf_hub_download(
         repo_id='lamm-mit/bio-graph-1K',
-        filename=graph_name,
-        local_dir='./graph_giant_component'
+        filename='large_graph_simple_giant.graphml',
+        local_dir='./graph_data'
     )
     G = nx.read_graphml(file_path)
     return G
 
-st.info("Loading the knowledge graph (~3 sec)...")
+# --- Load Embeddings
+@st.cache_resource
+def load_embeddings():
+    path = hf_hub_download(
+        repo_id='lamm-mit/bio-graph-1K',
+        filename='embeddings_simple_giant_ge-large-en-v1.5.pkl',
+        local_dir='./graph_data'
+    )
+    with open(path, 'rb') as f:
+        embeddings = pickle.load(f)
+    return embeddings
+
+# --- Reduce to 2D
+@st.cache_resource
+def reduce_embeddings(embeddings):
+    keys = list(embeddings.keys())
+    mat = np.stack([embeddings[k] for k in keys])
+    reducer = umap.UMAP(n_neighbors=15, min_dist=0.1)
+    proj = reducer.fit_transform(mat)
+    df = pd.DataFrame(proj, columns=["x", "y"])
+    df["label"] = keys
+    return df
+
+# --- Node similarity function
+def get_top_similar_nodes(embeddings, node_id, top_k=5):
+    if node_id not in embeddings:
+        return []
+    vec = embeddings[node_id].reshape(1, -1)
+    keys = list(embeddings.keys())
+    mat = np.stack([embeddings[k] for k in keys])
+    sims = cosine_similarity(vec, mat)[0]
+    top_indices = np.argsort(-sims)[1:top_k+1]  # exclude self
+    return [(keys[i], sims[i]) for i in top_indices]
+
+# --- Load Graph
+st.info("Loading graph (~3 sec)...")
 G = load_graph()
 st.success(f"Graph loaded with {len(G.nodes())} nodes and {len(G.edges())} edges.")
 
-# --- Show sample nodes to help user
-st.subheader("🧾 Sample Nodes")
+# --- Sample Nodes
+st.subheader("📎 Sample Nodes")
 if st.checkbox("Show 5 example node IDs"):
     for i, node in enumerate(G.nodes()):
-        st.write(f"🔹 `{node}`")
+        st.write(f"- `{node}`")
         if i >= 4:
             break
 
-# --- Node search by keyword
-st.subheader("🔍 Search for Node IDs by Keyword")
-keyword = st.text_input("Enter keyword (e.g., 'collagen', 'protein'):")
-
+# --- Search Node
+st.subheader("🔍 Search Nodes")
+keyword = st.text_input("Search keyword (e.g., collagen, structure)")
 if keyword:
     matches = [n for n in G.nodes() if keyword.lower() in n.lower()]
     if matches:
-        st.write(f"✅ Found {len(matches)} matches:")
-        for m in matches[:10]:
-            st.write(f"- **{m}**")
-        st.code("Copy and paste these IDs into the path finder below.")
+        st.success(f"Found {len(matches)} nodes:")
+        st.write(matches[:10])
+        st.code("Use these node IDs below.")
     else:
         st.warning("No matches found.")
 
-# --- Path finder
-st.subheader("🔗 Find Shortest Path Between Node IDs")
-
+# --- Path Finder
+st.subheader("🔗 Find Shortest Path")
 col1, col2 = st.columns(2)
 with col1:
     start_node = st.text_input("Start node ID")
@@ -60,26 +98,46 @@ if st.button("Find Path"):
         try:
             path = nx.shortest_path(G, source=start_node, target=end_node)
             st.success(" → ".join(path))
-            st.write("Path details:")
-            for node in path:
-                st.write(f"- {node}")
         except nx.NetworkXNoPath:
-            st.error("No path found between those nodes.")
+            st.error("No path found.")
     else:
-        st.error("One or both node IDs not found. Use the search above to look them up.")
+        st.error("Invalid node IDs.")
+
+# --- Node Similarity
+st.subheader("🤝 Node Similarity Search")
+sim_node = st.text_input("Enter node ID for similarity")
+if sim_node:
+    embeddings = load_embeddings()
+    if sim_node in embeddings:
+        results = get_top_similar_nodes(embeddings, sim_node)
+        st.success("Top similar nodes:")
+        for n, score in results:
+            st.write(f"- {n} (similarity: {score:.3f})")
+    else:
+        st.warning("Node not in embeddings.")
+
+# --- Embedding Map
+st.subheader("🗺️ 2D Graph Map")
+if st.button("Visualize All Nodes in 2D"):
+    embeddings = load_embeddings()
+    df = reduce_embeddings(embeddings)
+    fig = px.scatter(df, x="x", y="y", hover_name="label", width=900, height=600)
+    st.plotly_chart(fig)
 
 # --- Visualization
-st.subheader("🌐 Visualize a Subgraph")
-
+st.subheader("🌐 Subgraph Visualization")
 if keyword and matches:
-    subG = G.subgraph(matches[:30])  # Keep small for visualization
-    net = Network(height="600px", width="100%", notebook=False)
+    subG = G.subgraph(matches[:30])
+    net = Network(height="600px", width="100%")
     net.from_nx(subG)
     net.repulsion(node_distance=120)
-    net.show_buttons(filter_=['physics'])
     net.save_graph("graph.html")
     with open("graph.html", "r", encoding="utf-8") as f:
         html = f.read()
         components.html(html, height=600)
 else:
-    st.markdown("*Search above to see a related subgraph.*")
+    st.markdown("*Search to view a subgraph.*")
+
+# --- Colab Link
+st.subheader("🚀 Launch in Colab for Reasoning")
+st.markdown("Use [this Colab notebook](https://colab.research.google.com/github/YOUR_USERNAME/YOUR_REPO/blob/main/graph_reasoning_colab.ipynb) to run GPT-based reasoning or large compute jobs.")
