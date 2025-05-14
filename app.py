@@ -35,7 +35,10 @@ def load_embeddings():
         local_dir='./graph_data'
     )
     with open(path, 'rb') as f:
-        embeddings = pickle.load(f)
+        raw = pickle.load(f)
+
+    # Clean and flatten all vectors
+    embeddings = {k: np.array(v).squeeze() for k, v in raw.items()}
     return embeddings
 
 # --- Reduce to 2D
