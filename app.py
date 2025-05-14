@@ -42,7 +42,7 @@ def load_embeddings():
 @st.cache_resource
 def reduce_embeddings(embeddings):
     keys = list(embeddings.keys())
-    mat = np.stack([embeddings[k] for k in keys])
+    mat = np.stack([np.array(embeddings[k]).squeeze() for k in keys])
     reducer = umap.UMAP(n_neighbors=15, min_dist=0.1)
     proj = reducer.fit_transform(mat)
     df = pd.DataFrame(proj, columns=["x", "y"])
