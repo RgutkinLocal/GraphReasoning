@@ -2,3 +2,8 @@ streamlit
 networkx
 pyvis
 huggingface_hub
+pandas
+numpy
+scikit-learn
+umap-learn
+plotly
