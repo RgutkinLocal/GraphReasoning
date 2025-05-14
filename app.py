@@ -140,4 +140,4 @@ else:
 
 # --- Colab Link
 st.subheader("🚀 Launch in Colab for Reasoning")
-st.markdown("Use [this Colab notebook](https://colab.research.google.com/github/YOUR_USERNAME/YOUR_REPO/blob/main/graph_reasoning_colab.ipynb) to run GPT-based reasoning or large compute jobs.")
+st.markdown("Use [this Colab notebook](https://colab.research.google.com/github/RgutkinLocal/GraphReasoning/blob/main/graph_reasoning_colab.ipynb) to run GPT-based reasoning or large compute jobs.")
